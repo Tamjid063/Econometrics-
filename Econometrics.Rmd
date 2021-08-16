@@ -1,0 +1,403 @@
+---
+title: "Advanced Economies"
+author: "Muhammad Tamjid Rahman"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+
+# Loading R packages
+# Part 1)
+
+## 01)
+```{r echo=TRUE}
+data <-read.table("https://www.ssc.wisc.edu/~bhansen/econometrics/cps09mar.txt", header = FALSE, sep = "",dec = ".")
+colnames(data) <-c("age","female","hisp","edu","earn","hours","week","union","uncov","region","race","marital")
+
+
+edu<- data$edu>=12
+data1<-data[edu,]
+
+tot <- data1$hours*data1$week
+wage <- data1$earn/tot
+Y<-data1$log_wage <-as.matrix(log(wage))
+data1$exp <- data1$age-data1$edu-6
+data1$exp2 <- (data1$exp^2)/100
+
+data1$female_union <- ifelse(data1$female == 1 & data1$union ==1, 1, 0)
+data1$male_union <- ifelse(data1$female == 0 & data1$union ==1, 1, 0)
+data1$female_married <- ifelse(data1$female == 1 & data1$marital <=3, 1, 0)
+data1$male_married <- ifelse(data1$female == 0 & data1$marital <=3, 1, 0)
+data1$female_exmarried <- ifelse(data1$female == 1 & (data1$marital==4|data1$marital==5|data1$marital==6 ),1, 0)
+data1$male_exmarried <- ifelse(data1$female == 0 & (data1$marital==4|data1$marital==5|data1$marital==6 ), 1, 0)
+data1$black<-ifelse(data1$race == 2, 1, 0)
+data1$Am_Ind<-ifelse(data1$race == 3, 1, 0)
+data1$Asian<-ifelse(data1$race == 4, 1, 0)
+data1$mixed<-ifelse(data1$race >=6, 1, 0)
+
+x1<-data1[-c(1,5:13)]
+
+x2<-x1[,c('edu','exp','exp2','female','female_union',
+        'male_union','female_married','male_married',
+        'female_exmarried','male_exmarried','hisp','black','Am_Ind',
+        'Asian','mixed')]
+
+intercept <- rep(1, nrow(x2))
+
+X <- as.matrix(cbind(x2,intercept))
+xx<-t(X)%*%X
+xxi<-solve(xx)
+xy<-t(X)%*%Y
+beta<-xxi%*%xy
+
+n<-nrow(Y)
+k<-ncol(X)
+
+### Sigma
+e <- Y-X%*%beta
+sigma2<-as.numeric(1/(n-k)*(t(e)%*%e))
+sigma<-as.numeric( sqrt(sigma2))
+
+### S(beta)
+u1 <- X*(e%*%matrix(1,1,k))
+
+v1 <- xxi %*% (t(u1)%*%u1) %*% xxi
+
+s1 <- sqrt(diag(v1)) 
+```
+Using OLS the estimator was calculated. The formula for $\hat{beta}$ is,
+
+$$
+\hat{\beta}=(X^\prime X)^{-1}(XY)
+$$
+
+Then $\hat{\sigma}$ was calcilated by,
+$$
+\hat{\sigma}=\sqrt{\frac{\sum e^\prime e}{n-k}} 
+$$
+e=Y-X$\hat{\beta}$
+
+n= number of row of Y
+
+k= number of column of X
+
+Standard errors of the estimators are heteroskedasticity-consistent and calculated by  Horn-Horn-Duncan formula.
+
+$$
+ s(\hat{\beta})=\sqrt{diag (X^\prime X)^{-1}(\sum_{i=1}^{n}(1-h_{ii})^{-1}x_ix_i^\prime \hat{e_i}^2))(X^\prime X)^{-1}}
+$$
+Where, $h_{ii}=x_i(X^\prime X)x_i^\prime$
+
+```{r echo=TRUE}
+cbind(beta,s1)
+```
+\begin{table}[h!]
+	\begin{center}
+		\caption{OLS Estimates of Linear Equation for Log(Wage)}
+		\label{tab:table3}
+		\begin{tabular}{c c c}
+			\hline
+				\hline
+				\\
+			 & $\hat{\beta}$ & $s(\hat{\beta})$ \\  
+			\hline
+		Education &              0.117 & 0.001 \\
+		Experience          &     0.033 & 0.001\\
+		$Experience^2/100$   &          -0.056 & 0.002\\
+		Female       &    -0.098 & 0.011\\
+		Female Union Member &     0.023 & 0.020\\
+		Male Union Member    &    0.095 & 0.020\\
+		Married Female &   0.016 & 0.010\\
+		Married Male    &  0.21 & 0.010\\
+		Formerly Married Feale & -0.006 & 0.012\\
+		Formerly Married Male &    0.083 & 0.015\\
+		Hispanic         &     -0.108 & 0.008\\
+		Black  &           -0.096 & 0.008\\
+		American Indian    &       -0.137 & 0.027\\
+		Asian          &  -0.038 & 0.013\\
+		Mixed Race      &     -0.041 & 0.021\\
+		Intercept   &      0.909 & 0.0201\\
+		$\sigma^2$ & 0.565&\\
+		Sample Size & 46,943 &\\
+			\hline
+		\end{tabular}
+	\end{center}
+\end{table}
+
+
+## 02)
+```{r echo=TRUE}
+plot(X[,3],Y, xlab = 'Experience^2', ylab = 'log(wage)')
+```
+If the residuals depend on variables, then Heteroscedasticity exist. Otherwise homoscedastic.
+ From the plot of $Experience^2$ agaist log(wage), we can see there is no exact pattern. Residual will increase by decreasing the value of the variable. So, we can guess  heteroscedasticity is present in the data.
+ We can do some statistic tests to be confirmed.
+ 
+### Heteroscedasticity test
+ 
+```{r echo=TRUE}
+# Heteroscedasticity test
+
+# e as dependent variable and X as independent variable
+E<-data.matrix(e)
+xe<-t(X)%*%E
+xe<-t(X)%*%E
+
+beta_e<-xxi%*%xe #OLS estimator
+
+e_e <- E-(X%*%beta_e)
+sigma2_e<-as.numeric(1/(n-k)*(t(e_e)%*%e_e))
+sigma_e<-as.numeric( sqrt(sigma2_e))
+ve<-(t(E-mean(E))%*%(E-mean(E)))/(n-1) # variance of E
+
+#R square
+R2 <- as.numeric(1-(sigma2_e/ve)) 
+
+p<- ncol(x2) #number of variable
+```
+
+#### Breusch-Pagan test
+
+```{r echo=TRUE}
+(R2/p)/((1-R2)/n-p-1)
+```
+
+```{r echo=TRUE}
+qf(.95, df1=p, df2=(n-p-1)) # F distn with df1=k & df2=n-k-1
+```
+For Breusch-Pagan test the calculated value is 1.331858e-06.And the tabulated value is 1.666599 .
+
+#### LM statistic test
+
+```{r echo=TRUE}
+n*R2
+```
+
+```{r echo=TRUE}
+qchisq(.95, df=p) #Chi square with k df
+```
+
+For LM statistic test the calculated value is -15.00511 and the tabulated value is 24.99579 .
+
+In both tests the calculated value is less than the tabulated value. So we can conclude that heteroscedasticity is present.
+
+But for large number of observations, the effect of heteroscedasticity is minor.
+
+## 03
+
+### Variance of estimated partial effect
+```{r echo=TRUE}
+##Delta method
+v0 <- xxi*sigma2
+
+# covariance matrix for exp and exp2
+v0a<-data.frame(v0[c(2,3),c(2,3)])
+V<-matrix(c(v0a[1,1],v0a[1,2]/100,v0a[2,1]/100,v0a[2,2]/10000),2,2)
+```
+```{r echo=TRUE}
+print(V)
+```
+
+```{r echo=TRUE}
+exp_max<- -beta[2]/(2*beta[3]/100)
+print(exp_max)
+```
+Delta method was used to find the variance of the estimated partial effect with respect to experience when log(wage) as dependent variable.
+
+The estimated partial effect with respect to experience when log(wage) as dependent variable.
+
+$$
+\frac{\delta E(log(wage))}{\delta Experience} =\beta_{Experience}-\frac{2\beta_{Experience^2}\times Experience}{100} \\
+$$
+$$
+\therefore Experience_{max}=\frac{\beta_{Experience\times 100}}{-2\beta_{Experience^2}\times Experience}=29.37805
+$$
+```{r echo=TRUE}
+dexp_max_dbeta_exp <- -1/(2*beta[3]/100)
+dexp_max_dbeta_exp2 <- beta[2]/(2*(beta[3]/100)^2)
+G<- data.matrix(cbind(dexp_max_dbeta_exp,dexp_max_dbeta_exp2))
+print(G)
+```
+$$
+\frac{Experience_{max}}{\delta \beta_{Experience}}=\frac{-1}{2\times \beta_{Experience^2}}=886.0429
+$$
+$$
+\frac{Experience_{max}}{\delta \beta_{Experience^2}}=\frac{\beta_{Experience}}{2\times \beta_{Experience^2}^2}=52060.43
+$$
+$$
+\therefore G= (886.0429 \enspace 52060.43)
+$$
+Covariance matrix for Experience and Experience^2
+```{r echo=TRUE}
+v0 <- xxi*sigma2 # 
+
+# covariance matrix for exp and exp2
+v0a<-data.frame(v0[c(2,3),c(2,3)])
+V<-matrix(c(v0a[1,1],v0a[1,2]/100,v0a[2,1]/100,v0a[2,2]/10000),2,2)
+
+print(V)
+```
+$$
+V=\begin{pmatrix}
+	7.858481e-07 & -1.543066e-08\\
+	-1.543066e-08 & 3.294452e-10
+\end{pmatrix}
+$$
+```{r echo=TRUE}
+var_pexp<-G%*%V%*%t(G) #variance of partial effect 
+print(var_pexp) 
+```
+$$
+\therefore GVG^{\prime}=0.08627495
+$$
+So, the variance of the estimated partial effect with respect to experience when log(wage) as dependent variable is 0.08627495
+
+## 04
+leverage and influence
+```{r echo=TRUE}
+leverage <- rowSums(X*(X%*%xxi))
+r <- e/(1-leverage) # \tilde{e}
+d <- leverage*e/(1-leverage) # h_ii \tilde{e}
+print(max(abs(d)))
+# which has the max value?
+ind <- which(abs(d)==max(abs(d)))
+print(X[ind,])
+print(leverage[ind])
+
+x_i <- X[-ind,]
+y_i <- Y[-ind]
+xx_i <- t(x_i)%*%x_i
+xy_i <- t(x_i)%*%y_i
+beta_i <- solve(xx_i,xy_i)
+betas <- cbind(beta,beta_i)
+print(betas)
+```
+```{r echo=TRUE}
+u1 <- X*(e%*%matrix(1,1,k))
+u2 <- X*((e/sqrt(1-leverage))%*%matrix(1,1,k))
+u3 <- X*((e/(1-leverage))%*%matrix(1,1,k))
+XXi <- solve(t(X)%*%X)
+
+v1 <- XXi %*% (t(u1)%*%u1) %*% XXi
+v1a <- n/(n-k) * XXi %*% (t(u1)%*%u1) %*% XXi
+v2 <- XXi %*% (t(u2)%*%u2) %*% XXi
+v3 <- XXi %*% (t(u3)%*%u3) %*% XXi
+
+s1 <- sqrt(diag(v1)) # HC0
+s1a <- sqrt(diag(v1a)) # HC1
+s2 <- sqrt(diag(v2)) # HC2
+s3 <- sqrt(diag(v3)) # HC3
+s4<-cbind(s1,s1a,s2,s3)
+```
+```{r echo=TRUE}
+print(s4)
+```
+The four covariance estimators HC0, HC1, HC2, and HC3.
+## 05)
+
+# Part 2)
+
+## Jackknife Variance
+
+```{r echo=TRUE}
+jackknife_variance <- function(iN) {
+  
+#iN = 50 # sample size
+ik = 1 # no. of regressors
+sigma = 1 # standard deviation of the errors
+
+beta = 1
+set.seed(63)
+# we make the variables
+mX = matrix(rnorm(iN*ik), iN, ik)
+ve = rnorm(iN) * sigma
+vy = c(mX %*% beta + ve)
+
+hbeta <- function(vy, mX){
+  
+  return(c(sum(mX^3*vy)/sum(mX^4)))
+}
+
+### Jackknife
+
+jackknife <- function(some_statistic, vy, mX){
+  
+  ftmp <- function(iter){
+    return(some_statistic( vy = vy[-iter], mX = mX[-iter,] ))
+  }
+  
+  return(sapply(1:length(vy), ftmp))
+}
+
+ret = jackknife(hbeta, vy, mX)
+ret
+
+tmp = ret - mean(ret)
+return(crossprod(tmp) * (iN - 1)/iN)
+}
+```
+
+
+## Bootstrap variance
+
+
+```{r echo=TRUE}
+## Bootstrap
+bootstrap_variance<- function(iN){
+# a comarison or a small experiment
+set.seed(63)
+ik = 1 # no. of regressors
+sigma = 1 # standard deviation of the errors
+
+beta = 1
+set.seed(63)
+# we make the variables
+mX = matrix(rnorm(iN*ik), iN, ik)
+ve = rnorm(iN) * sigma
+vy = c(mX %*% beta + ve)
+
+hbeta <- function(vy, mX){
+  
+  return(c(sum(mX^3*vy)/sum(mX^4)))
+}
+
+nonparametric_bootstrap <- function(some_statistic, vy, mX, iB=1000){
+  
+  ftmp <- function(vs) return(some_statistic(vy[vs], mX[vs,]))
+  
+  resamples = matrix(sample(1:length(vy), length(vy)*iB, replace=TRUE), length(vy), iB)
+  
+  return(apply(resamples, 2, ftmp))
+  
+}
+
+iB = 500
+ret = nonparametric_bootstrap(hbeta, vy, mX, iB)
+ret
+
+tmp = ret - mean(ret)
+crossprod(tmp)/(iB - 1)
+}
+```
+\begin{table}[h!]
+	\begin{center}
+		\caption{Jakknife Variance and Bootstrap Variance.}
+		\label{tab:table3}
+		\begin{tabular}{c|c|c}
+		  \hline
+			\textbf{Sample Size} & \textbf{Jakknife Variance} & \textbf{Bootstrap Variance} \\  
+			\hline
+			50 & 0.0658  & 0.0310 \\  
+			\hline
+			100 & 0.0057 & 0.0072\\
+			\hline
+			500 &  0.0051 & 0.0051\\
+			\hline
+		\end{tabular}
+	\end{center}
+\end{table}
+
+From the result, we see that the variance decreases with increase of sample size in both cases.For a small sample size Bootstrap gave small variance but for large sample size both gave almost same result.
